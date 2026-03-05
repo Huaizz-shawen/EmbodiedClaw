@@ -157,6 +157,8 @@ function buildDynamicContext(
 ### Tips
 - Use \`ros2_list_topics\` to discover all available topics
 - Use \`ros2_subscribe_once\` to read the current value of any topic
+- Use \`ros2_lidar_scene\` before planning and after execution for structured local scene state
+- Use \`ros2_verify_motion\` to compare pre/post scene snapshots and verify motion success
 - Use \`ros2_camera_snapshot\` to see what the robot sees
 - The user can say /estop at any time to immediately stop the robot`;
 
@@ -186,6 +188,8 @@ You are connected to a ROS2 robot named "${name}". You can control it using the 
 ### Tips
 - Use \`ros2_list_topics\` to discover all available topics
 - Use \`ros2_subscribe_once\` to read the current value of any topic
+- Use \`ros2_lidar_scene\` before planning and after execution for structured local scene state
+- Use \`ros2_verify_motion\` to compare pre/post scene snapshots and verify motion success
 - Use \`ros2_camera_snapshot\` to see what the robot sees
 - The user can say /estop at any time to immediately stop the robot
 `.trim();

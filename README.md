@@ -110,6 +110,8 @@ The AI agent has access to these ROS2 tools:
 | `ros2_param_get/set` | Get/set ROS2 node parameters |
 | `ros2_list_topics` | Discover available topics |
 | `ros2_camera_snapshot` | Capture a camera frame |
+| `ros2_lidar_scene` | Build structured local scene state from `/scan + /odom` |
+| `ros2_verify_motion` | Compare pre/post scene snapshots to validate motion success |
 
 ## Development
 

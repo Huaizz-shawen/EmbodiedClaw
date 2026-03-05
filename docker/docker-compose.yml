@@ -1,11 +1,10 @@
-version: "3.8"
-
 services:
   # ROS2 + rosbridge_server + Gazebo simulation
   ros2:
+    runtime: runc
     build:
-      context: .
-      dockerfile: Dockerfile.ros2
+      context: ..
+      dockerfile: docker/Dockerfile.ros2
     image: rosclaw/ros2:latest
     ports:
       - "9090:9090"   # rosbridge WebSocket
@@ -19,6 +18,7 @@ services:
 
   # RosClaw plugin (runs within OpenClaw)
   rosclaw:
+    runtime: runc
     build:
       context: ..
       dockerfile: docker/Dockerfile.rosclaw

@@ -17,11 +17,13 @@ Use this skill when the user wants to see what the robot sees:
 
 ```
 Tool: ros2_camera_snapshot
-Topic: /camera/image_raw/compressed
+Topic: /camera/image_raw (or /camera/image_raw/compressed)
 ```
 
 ## Tips
 
-- Default camera topic is `/camera/image_raw/compressed`. Use `ros2_list_topics` to find other camera topics if the default isn't available.
+- The tool supports both `sensor_msgs/msg/CompressedImage` and raw `sensor_msgs/msg/Image`.
+- If the robot publishes only raw images, pass `topic: "/camera/image_raw"` explicitly.
+- Use `ros2_list_topics` to find available camera topics.
 - If the user asks about a specific direction, note that you can only show what the robot's camera is currently pointed at.
 - For multiple cameras, ask which one the user wants to see.
