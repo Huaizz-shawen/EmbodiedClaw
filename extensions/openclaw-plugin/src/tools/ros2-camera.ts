@@ -3,6 +3,7 @@ import type { OpenClawPluginApi } from "../plugin-api.js";
 import { getTransport } from "../service.js";
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { deflateSync } from "node:zlib";
 
 type Dict = Record<string, unknown>;
 type SnapshotKind = "compressed" | "raw";
@@ -255,18 +256,18 @@ function decodeRaw(msg: Dict): {
     throw new Error("Raw Image has empty data");
   }
 
-  const bmp = rawImageToBmp(width, height, step, encoding, bytes);
+  const png = rawImageToPng(width, height, step, encoding, bytes);
   return {
-    data: Buffer.from(bmp).toString("base64"),
-    mimeType: "image/bmp",
-    format: "bmp",
+    data: Buffer.from(png).toString("base64"),
+    mimeType: "image/png",
+    format: "png",
     width,
     height,
     encoding,
   };
 }
 
-function rawImageToBmp(
+function rawImageToPng(
   width: number,
   height: number,
   step: number,
@@ -275,45 +276,41 @@ function rawImageToBmp(
 ): Uint8Array {
   const channels = channelsForEncoding(encoding);
   const srcRowStride = step > 0 ? step : width * channels;
-  const dstRowStride = Math.ceil((width * 3) / 4) * 4;
-  const pixelBytes = dstRowStride * height;
-  const totalSize = 14 + 40 + pixelBytes;
-  const out = new Uint8Array(totalSize);
-  const view = new DataView(out.buffer);
+  const raw = new Uint8Array(height * (1 + width * 3));
 
-  // BITMAPFILEHEADER
-  out[0] = 0x42; // B
-  out[1] = 0x4d; // M
-  view.setUint32(2, totalSize, true);
-  view.setUint32(10, 14 + 40, true);
-
-  // BITMAPINFOHEADER
-  view.setUint32(14, 40, true); // DIB header size
-  view.setInt32(18, width, true);
-  view.setInt32(22, height, true); // bottom-up bitmap
-  view.setUint16(26, 1, true); // planes
-  view.setUint16(28, 24, true); // bpp
-  view.setUint32(30, 0, true); // BI_RGB
-  view.setUint32(34, pixelBytes, true);
-  view.setInt32(38, 2835, true); // 72 DPI
-  view.setInt32(42, 2835, true);
-
-  let dstOffset = 14 + 40;
-  for (let y = height - 1; y >= 0; y -= 1) {
+  let outOffset = 0;
+  for (let y = 0; y < height; y += 1) {
+    // PNG filter method 0 (None) per row.
+    raw[outOffset++] = 0;
     const srcRow = y * srcRowStride;
     for (let x = 0; x < width; x += 1) {
       const src = srcRow + x * channels;
       const [r, g, b] = readPixel(data, src, encoding);
-      out[dstOffset++] = b;
-      out[dstOffset++] = g;
-      out[dstOffset++] = r;
-    }
-    while ((dstOffset - (14 + 40)) % dstRowStride !== 0) {
-      out[dstOffset++] = 0;
+      raw[outOffset++] = r;
+      raw[outOffset++] = g;
+      raw[outOffset++] = b;
     }
   }
 
-  return out;
+  const signature = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
+
+  const ihdrData = new Uint8Array(13);
+  const ihdrView = new DataView(ihdrData.buffer);
+  ihdrView.setUint32(0, width, false);
+  ihdrView.setUint32(4, height, false);
+  ihdrData[8] = 8; // bit depth
+  ihdrData[9] = 2; // color type: truecolor RGB
+  ihdrData[10] = 0; // compression method
+  ihdrData[11] = 0; // filter method
+  ihdrData[12] = 0; // interlace method
+
+  const idatData = new Uint8Array(deflateSync(raw));
+
+  const ihdrChunk = pngChunk("IHDR", ihdrData);
+  const idatChunk = pngChunk("IDAT", idatData);
+  const iendChunk = pngChunk("IEND", new Uint8Array(0));
+
+  return concatUint8(signature, ihdrChunk, idatChunk, iendChunk);
 }
 
 function readPixel(data: Uint8Array, idx: number, encoding: string): [number, number, number] {
@@ -367,6 +364,43 @@ function formatToMime(format: string): string {
 
 function toInt(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? Math.floor(v) : 0;
+}
+
+function pngChunk(type: string, data: Uint8Array): Uint8Array {
+  const out = new Uint8Array(12 + data.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, data.length, false);
+  out[4] = type.charCodeAt(0);
+  out[5] = type.charCodeAt(1);
+  out[6] = type.charCodeAt(2);
+  out[7] = type.charCodeAt(3);
+  out.set(data, 8);
+  const crc = crc32(out.subarray(4, 8 + data.length));
+  view.setUint32(8 + data.length, crc >>> 0, false);
+  return out;
+}
+
+function concatUint8(...parts: Uint8Array[]): Uint8Array {
+  const total = parts.reduce((n, p) => n + p.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const p of parts) {
+    out.set(p, offset);
+    offset += p.length;
+  }
+  return out;
+}
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xffffffff;
+  for (let i = 0; i < data.length; i += 1) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j += 1) {
+      const mask = -(crc & 1);
+      crc = (crc >>> 1) ^ (0xedb88320 & mask);
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
 }
 
 function estimateBase64Bytes(base64: string): number {
