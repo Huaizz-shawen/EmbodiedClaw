@@ -70,7 +70,7 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
             width: image.width,
             height: image.height,
             encoding: image.encoding,
-            data: image.data,
+            dataBytes: estimateBase64Bytes(image.data),
             savedPath: null as string | null,
           };
 
@@ -82,7 +82,7 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
             content: [
               {
                 type: "text",
-                text: JSON.stringify({ ...result, data: "[base64 omitted]" }),
+                text: JSON.stringify(result),
               },
               { type: "image", data: image.data, mimeType: image.mimeType },
             ],
@@ -344,6 +344,11 @@ function formatToMime(format: string): string {
 
 function toInt(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? Math.floor(v) : 0;
+}
+
+function estimateBase64Bytes(base64: string): number {
+  const clean = base64.replace(/=+$/, "");
+  return Math.floor((clean.length * 3) / 4);
 }
 
 async function persistSnapshot(
