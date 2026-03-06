@@ -1,6 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import type { OpenClawPluginApi } from "../plugin-api.js";
 import { getTransport } from "../service.js";
+import { mkdir, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 
 type Dict = Record<string, unknown>;
 type SnapshotKind = "compressed" | "raw";
@@ -30,12 +32,26 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
         }),
       ),
       timeout: Type.Optional(Type.Number({ description: "Timeout in milliseconds (default: 10000)" })),
+      saveToFile: Type.Optional(
+        Type.Boolean({
+          description:
+            "Whether to save the captured image to local workspace (default: true)",
+        }),
+      ),
+      savePath: Type.Optional(
+        Type.String({
+          description:
+            "Optional absolute file path override. If omitted, uses workspace snapshot directory.",
+        }),
+      ),
     }),
 
     async execute(_toolCallId, params) {
       const topic = params["topic"] as string | undefined;
       const msgType = params["type"] as string | undefined;
       const timeout = (params["timeout"] as number | undefined) ?? 10000;
+      const saveToFile = (params["saveToFile"] as boolean | undefined) ?? true;
+      const savePath = params["savePath"] as string | undefined;
 
       const transport = getTransport();
       const candidates = buildCandidates(topic, msgType);
@@ -55,11 +71,19 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
             height: image.height,
             encoding: image.encoding,
             data: image.data,
+            savedPath: null as string | null,
           };
+
+          if (saveToFile) {
+            result.savedPath = await persistSnapshot(image.data, image.format, savePath, c.topic);
+          }
 
           return {
             content: [
-              { type: "text", text: JSON.stringify({ ...result, data: "[base64 omitted]" }) },
+              {
+                type: "text",
+                text: JSON.stringify({ ...result, data: "[base64 omitted]" }),
+              },
               { type: "image", data: image.data, mimeType: image.mimeType },
             ],
             details: result,
@@ -320,4 +344,38 @@ function formatToMime(format: string): string {
 
 function toInt(v: unknown): number {
   return typeof v === "number" && Number.isFinite(v) ? Math.floor(v) : 0;
+}
+
+async function persistSnapshot(
+  base64: string,
+  format: string,
+  savePath: string | undefined,
+  topic: string,
+): Promise<string> {
+  const explicitPath = savePath?.trim();
+  if (explicitPath) {
+    const parent = explicitPath.slice(0, Math.max(0, explicitPath.lastIndexOf("/")));
+    if (parent) await mkdir(parent, { recursive: true });
+    await writeFile(explicitPath, Buffer.from(base64, "base64"));
+    return explicitPath;
+  }
+
+  const workspace = process.env["OPENCLAW_WORKSPACE"] ?? "/home/node/.openclaw/workspace";
+  const dir = join(workspace, "rosclaw_snapshots");
+  await mkdir(dir, { recursive: true });
+
+  const ext = formatToExt(format);
+  const topicSlug = basename(topic).replace(/[^a-zA-Z0-9_-]/g, "_") || "camera";
+  const filePath = join(dir, `${topicSlug}_${Date.now()}.${ext}`);
+  await writeFile(filePath, Buffer.from(base64, "base64"));
+  return filePath;
+}
+
+function formatToExt(format: string): string {
+  const f = format.toLowerCase();
+  if (f.includes("jpeg") || f.includes("jpg")) return "jpg";
+  if (f.includes("png")) return "png";
+  if (f.includes("webp")) return "webp";
+  if (f.includes("bmp")) return "bmp";
+  return "jpg";
 }
