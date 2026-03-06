@@ -35,7 +35,7 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
       saveToFile: Type.Optional(
         Type.Boolean({
           description:
-            "Whether to save the captured image to local workspace (default: true)",
+            "Whether to save the captured image to local workspace (default: false)",
         }),
       ),
       savePath: Type.Optional(
@@ -50,7 +50,7 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
       const topic = params["topic"] as string | undefined;
       const msgType = params["type"] as string | undefined;
       const timeout = (params["timeout"] as number | undefined) ?? 10000;
-      const saveToFile = (params["saveToFile"] as boolean | undefined) ?? true;
+      const saveToFile = (params["saveToFile"] as boolean | undefined) ?? false;
       const savePath = params["savePath"] as string | undefined;
 
       const transport = getTransport();
@@ -61,7 +61,18 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
         try {
           const msg = await subscribeOnce(transport, c.topic, c.type, timeout);
           const image = decodeSnapshot(msg, c.kind);
-          const result = {
+          const result: {
+            success: boolean;
+            topic: string;
+            type: string;
+            format: string;
+            mimeType: string;
+            width: number | null;
+            height: number | null;
+            encoding: string | null;
+            dataBytes: number;
+            savedPath?: string;
+          } = {
             success: true,
             topic: c.topic,
             type: c.type,
@@ -71,18 +82,30 @@ export function registerCameraTool(api: OpenClawPluginApi): void {
             height: image.height,
             encoding: image.encoding,
             dataBytes: estimateBase64Bytes(image.data),
-            savedPath: null as string | null,
           };
 
           if (saveToFile) {
-            result.savedPath = await persistSnapshot(image.data, image.format, savePath, c.topic);
+            result.savedPath = await persistSnapshot(
+              image.data,
+              image.format,
+              savePath,
+              c.topic,
+            );
           }
+
+          const publicSummary = {
+            success: true,
+            topic: result.topic,
+            format: result.format,
+            width: result.width,
+            height: result.height,
+          };
 
           return {
             content: [
               {
                 type: "text",
-                text: JSON.stringify(result),
+                text: JSON.stringify(publicSummary),
               },
               { type: "image", data: image.data, mimeType: image.mimeType },
             ],
