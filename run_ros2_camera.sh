@@ -23,7 +23,7 @@ docker run --rm -it \
   bash -lc '
     set -euo pipefail
 
-    export GZ_SIM_RESOURCE_PATH=/opt/ros/jazzy/share/turtlebot3_gazebo/models:${GZ_SIM_RESOURCE_PATH}
+    export GZ_SIM_RESOURCE_PATH=/opt/ros/jazzy/share/turtlebot3_gazebo/models:${GZ_SIM_RESOURCE_PATH:-}
 
     ros2 launch rosbridge_server rosbridge_websocket_launch.xml &
     sleep 2
