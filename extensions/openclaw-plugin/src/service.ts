@@ -4,6 +4,7 @@ import { createTransport } from "./transport/factory.js";
 import type { OpenClawPluginApi } from "./plugin-api.js";
 import type { PluginLogger } from "./plugin-api.js";
 import type { RosClawConfig } from "./config.js";
+import { initLearningStore } from "./learning/episode-store.js";
 
 /** Shared transport instance for all tools. */
 let transport: RosTransport | null = null;
@@ -75,19 +76,12 @@ export function registerService(api: OpenClawPluginApi, config: RosClawConfig): 
     id: "ros2-transport",
 
     async start(_ctx) {
-      let transportCfg: TransportConfig;
-
-      switch (mode) {
-        case "rosbridge":
-          transportCfg = { mode: "rosbridge", rosbridge: config.rosbridge };
-          break;
-        case "local":
-          transportCfg = { mode: "local", local: config.local };
-          break;
-        case "webrtc":
-          transportCfg = { mode: "webrtc", webrtc: config.webrtc };
-          break;
-      }
+      const transportCfg: TransportConfig =
+        mode === "rosbridge"
+          ? { mode: "rosbridge", rosbridge: config.rosbridge }
+          : mode === "local"
+            ? { mode: "local", local: config.local }
+            : { mode: "webrtc", webrtc: config.webrtc };
 
       api.logger.info(`Connecting to ROS2 via ${mode} transport...`);
 
@@ -99,6 +93,7 @@ export function registerService(api: OpenClawPluginApi, config: RosClawConfig): 
 
       await transport.connect();
       currentMode = mode;
+      await initLearningStore(_ctx.stateDir, api.logger);
       api.logger.info(`ROS2 transport connected (mode: ${mode})`);
     },
 

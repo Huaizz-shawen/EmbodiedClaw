@@ -3,6 +3,9 @@
   "name": "RosClaw",
   "version": "0.0.1",
   "description": "Control ROS2 robots through natural language via messaging apps",
+  "skills": [
+    "./skills"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
