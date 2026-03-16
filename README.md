@@ -113,6 +113,70 @@ The AI agent has access to these ROS2 tools:
 | `ros2_lidar_scene` | Build structured local scene state from `/scan + /odom` |
 | `ros2_verify_motion` | Compare pre/post scene snapshots to validate motion success |
 
+## Camera Debug Notes (From Real Integration)
+
+This section summarizes practical lessons learned while integrating camera snapshots
+through ROS2 + rosbridge + OpenClaw + Feishu.
+
+### Recommended Snapshot Call
+
+For the current TurtleBot/Gazebo setup:
+
+```json
+{"topic":"/camera/image_raw","type":"sensor_msgs/msg/Image","saveToFile":false,"timeout":15000}
+```
+
+Expected result fields:
+- `format: "png"`
+- `mimeType: "image/png"`
+- `width`, `height`, `encoding`, `dataBytes`
+
+### Snapshot Behavior (Current)
+
+- Raw `sensor_msgs/msg/Image` is converted to **PNG** for better chat compatibility.
+- `saveToFile` defaults to `false` to avoid path spam and excessive file writes.
+- Tool text/details avoid embedding full base64 payloads in normal responses.
+- If `saveToFile=true`, snapshot files are written under:
+  - `/home/node/.openclaw/workspace/rosclaw_snapshots/`
+
+### Common Failure Modes
+
+1. **Tool not found**
+   - Cause: RosClaw plugin failed to load (often missing dependencies like `zod`).
+   - Check gateway logs for plugin load errors.
+
+2. **Topic exists but snapshot times out**
+   - Cause: camera topic not actually publishing frames.
+   - Verify with:
+     - `ros2 topic echo /camera/image_raw --once`
+     - `ros2 topic info /camera/image_raw -v`
+
+3. **Only path/text appears in chat, not image**
+   - Cause: channel adapter sent text fallback instead of image content.
+   - Ensure chat pipeline supports image message sending (or file upload flow).
+
+4. **Context overflow**
+   - Cause: accidentally returning raw image/base64 text in conversation.
+   - Keep snapshot responses compact and avoid pasting binary payloads.
+
+### Deployment Gotchas
+
+- `docker restart` does **not** refresh code baked into an image.
+  - If code is not bind-mounted, rebuild/recreate container after `git pull`.
+- Verify the real plugin path in runtime:
+  - e.g. `/opt/rosclaw/extensions/openclaw-plugin/...`
+  - not always `/app/extensions/...`
+- If source is mounted read-only (`:ro`), dependency install/update will fail (`EROFS`).
+  - Use writable mount for development:
+    - `-v ~/EmbodiedClaw:/opt/rosclaw:rw`
+
+### Headless Gazebo Stability
+
+`run_ros2_camera*.sh` scripts were hardened for headless stability:
+- default no GUI
+- software rendering env (`llvmpipe`)
+- startup readiness checks before camera validation
+
 ## Development
 
 ```bash
